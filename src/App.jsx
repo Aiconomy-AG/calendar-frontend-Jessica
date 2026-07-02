@@ -6,8 +6,11 @@ import interactionPlugin from "@fullcalendar/interaction";
 import "./App.css";
 
 function App() {
+  const API_URL = import.meta.env.VITE_API_URL;
+
   const [events, setEvents] = useState([]);
   const [selectedDate, setSelectedDate] = useState("");
+
   const [form, setForm] = useState({
     title: "",
     description: "",
@@ -21,13 +24,14 @@ function App() {
   const [editForm, setEditForm] = useState({
     title: "",
     description: "",
+    date: "",
     startTime: "",
     endTime: "",
     color: "#2563eb",
   });
 
   function loadEvents() {
-    fetch("http://localhost/api/events")
+    fetch(`${API_URL}/api/events`)
       .then((response) => response.json())
       .then((data) => {
         const formattedEvents = data.map((event) => ({
@@ -35,10 +39,11 @@ function App() {
           title: event.title,
           start: event.start,
           end: event.end,
-          backgroundColor: event.color,
-          borderColor: event.color,
+          backgroundColor: event.color || "#2563eb",
+          borderColor: event.color || "#2563eb",
           extendedProps: {
             description: event.description,
+            color: event.color || "#2563eb",
           },
         }));
 
@@ -74,7 +79,9 @@ function App() {
 
   function handleDateClick(info) {
     const defaultTimes = getTimes();
+
     setSelectedDate(info.dateStr);
+
     setForm({
       ...form,
       startTime: defaultTimes.startTime,
@@ -126,7 +133,7 @@ function App() {
       color: form.color,
     };
 
-    fetch("http://localhost/api/events", {
+    fetch(`${API_URL}/api/events`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -138,8 +145,8 @@ function App() {
         setForm({
           title: "",
           description: "",
-          startTime: "10:00",
-          endTime: "11:00",
+          startTime: "",
+          endTime: "",
           color: "#2563eb",
         });
 
@@ -159,7 +166,7 @@ function App() {
       color: editForm.color,
     };
 
-    fetch("http://localhost/api/events/" + editingEvent.id, {
+    fetch(`${API_URL}/api/events/${editingEvent.id}`, {
       method: "PUT",
       headers: {
         "Content-Type": "application/json",
@@ -174,7 +181,7 @@ function App() {
   }
 
   function handleDelete() {
-    fetch("http://localhost/api/events/" + editingEvent.id, {
+    fetch(`${API_URL}/api/events/${editingEvent.id}`, {
       method: "DELETE",
     }).then(() => {
       setEditingEvent(null);
@@ -319,7 +326,7 @@ function App() {
 
               <label>
                 Color:
-                <input 
+                <input
                   type="color"
                   name="color"
                   value={editForm.color}
@@ -330,9 +337,21 @@ function App() {
               <div className="modal-buttons">
                 <button type="submit">Save Changes</button>
 
-                <button type="button" className="delete-button" onClick={handleDelete}>Delete</button>
+                <button
+                  type="button"
+                  className="delete-button"
+                  onClick={handleDelete}
+                >
+                  Delete
+                </button>
 
-                <button type="button" className="cancel-button" onClick={closeEditPopup}>Cancel</button>
+                <button
+                  type="button"
+                  className="cancel-button"
+                  onClick={closeEditPopup}
+                >
+                  Cancel
+                </button>
               </div>
             </form>
           </div>
