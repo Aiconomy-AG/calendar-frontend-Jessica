@@ -139,3 +139,36 @@
   background: #e5e7eb;
   color: #111827;
 }
+
+.top-bar {
+  max-width: 1100px;
+  margin: 0 auto 20px auto;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.top-bar p {
+  margin: 0;
+  color: #4b5563;
+}
+
+.top-bar button {
+  background: #111827;
+  color: white;
+  border: none;
+  padding: 10px 18px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.google-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.google-actions span {
+  color: #4b5563;
+  font-size: 14px;
+}

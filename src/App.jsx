@@ -8,6 +8,21 @@ import "./App.css";
 function App() {
   const API_URL = import.meta.env.VITE_API_URL;
 
+  const [token, setToken] = useState(localStorage.getItem("token"));
+  const [user, setUser] = useState(null);
+  const [authMode, setAuthMode] = useState("login");
+
+  const [authForm, setAuthForm] = useState({
+    name: "",
+    email: "",
+    password: "",
+  });
+
+  const [googleStatus, setGoogleStatus] = useState({
+    connected: false,
+    google_email: null,
+  });
+
   const [events, setEvents] = useState([]);
   const [selectedDate, setSelectedDate] = useState("");
 
@@ -33,15 +48,143 @@ function App() {
     color: "#2563eb",
   });
 
-  function loadEvents() {
-    fetch(`${API_URL}/api/events`)
+  function getAuthHeaders() {
+    return {
+      Authorization: `Bearer ${localStorage.getItem("token")}`,
+    };
+  }
+
+  function getJsonAuthHeaders() {
+    return {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${localStorage.getItem("token")}`,
+    };
+  }
+
+  function handleAuthChange(e) {
+    setAuthForm({
+      ...authForm,
+      [e.target.name]: e.target.value,
+    });
+  }
+
+  function handleRegister(e) {
+    e.preventDefault();
+
+    fetch(`${API_URL}/api/register`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(authForm),
+    })
       .then((response) => response.json())
       .then((data) => {
+        if (!data.token) {
+          alert("Register failed.");
+          return;
+        }
+
+        localStorage.setItem("token", data.token);
+        setToken(data.token);
+        setUser(data.user);
+        setAuthForm({
+          name: "",
+          email: "",
+          password: "",
+        });
+      });
+  }
+
+  function handleLogin(e) {
+    e.preventDefault();
+
+    fetch(`${API_URL}/api/login`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        email: authForm.email,
+        password: authForm.password,
+      }),
+    })
+      .then((response) => response.json())
+      .then((data) => {
+        if (!data.token) {
+          alert("Login failed. Check email and password.");
+          return;
+        }
+
+        localStorage.setItem("token", data.token);
+        setToken(data.token);
+        setUser(data.user);
+        setAuthForm({
+          name: "",
+          email: "",
+          password: "",
+        });
+      });
+  }
+
+  function handleLogout() {
+    fetch(`${API_URL}/api/logout`, {
+      method: "POST",
+      headers: getAuthHeaders(),
+    }).then(() => {
+      localStorage.removeItem("token");
+      setToken(null);
+      setUser(null);
+      setEvents([]);
+      setSelectedDate("");
+      setEditingEvent(null);
+    });
+  }
+
+  function loadUser() {
+    fetch(`${API_URL}/api/me`, {
+      headers: getAuthHeaders(),
+    })
+      .then((response) => response.json())
+      .then((data) => {
+        if (data.message === "Unauthenticated.") {
+          localStorage.removeItem("token");
+          setToken(null);
+          setUser(null);
+          return;
+        }
+
+        setUser(data);
+      });
+  }
+
+  function loadGoogleStatus() {
+    fetch(`${API_URL}/api/google/status`, {
+      headers: getAuthHeaders(),
+    })
+      .then((response) => response.json())
+      .then((data) => {
+        setGoogleStatus(data);
+      });
+  }
+
+  function loadEvents() {
+    fetch(`${API_URL}/api/events`, {
+      headers: getAuthHeaders(),
+    })
+      .then((response) => response.json())
+      .then((data) => {
+        if (!Array.isArray(data)) {
+          setEvents([]);
+          return;
+        }
+
         const formattedEvents = data.map((event) => ({
           id: event.id,
           title: event.title,
           start: event.start,
           end: event.end,
+          allDay: event.is_all_day,
           backgroundColor: event.color || "#2563eb",
           borderColor: event.color || "#2563eb",
           extendedProps: {
@@ -55,8 +198,12 @@ function App() {
   }
 
   useEffect(() => {
-    loadEvents();
-  }, []);
+    if (token) {
+      loadUser();
+      loadEvents();
+      loadGoogleStatus();
+    }
+  }, [token]);
 
   function getTodayDate() {
     return new Date().toISOString().slice(0, 10);
@@ -192,9 +339,7 @@ function App() {
 
     fetch(`${API_URL}/api/events`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: getJsonAuthHeaders(),
       body: JSON.stringify(newEvent),
     })
       .then((response) => response.json())
@@ -252,9 +397,7 @@ function App() {
 
     fetch(`${API_URL}/api/events/${editingEvent.id}`, {
       method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: getJsonAuthHeaders(),
       body: JSON.stringify(updatedEvent),
     })
       .then((response) => response.json())
@@ -267,6 +410,7 @@ function App() {
   function handleDelete() {
     fetch(`${API_URL}/api/events/${editingEvent.id}`, {
       method: "DELETE",
+      headers: getAuthHeaders(),
     }).then(() => {
       setEditingEvent(null);
       loadEvents();
@@ -277,9 +421,172 @@ function App() {
     setEditingEvent(null);
   }
 
+  function connectGoogleCalendar() {
+    fetch(`${API_URL}/api/google/redirect`, {
+      headers: getAuthHeaders(),
+    })
+      .then((response) => response.json())
+      .then((data) => {
+        if (data.url) {
+          window.location.href = data.url;
+        }
+      });
+  }
+
+  function disconnectGoogleCalendar() {
+    fetch(`${API_URL}/api/google/disconnect`, {
+      method: "POST",
+      headers: getAuthHeaders(),
+    }).then(() => {
+      setGoogleStatus({
+        connected: false,
+        google_email: null,
+      });
+    });
+  }
+
+  function formatDateTime(value) {
+    if (!value) return "";
+
+    return new Date(value).toLocaleString([], {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  }
+
+  function syncFromGoogle() {
+    fetch(`${API_URL}/api/google/sync`, {
+      method: "POST",
+      headers: getAuthHeaders(),
+    })
+      .then((response) => response.json())
+      .then((data) => {
+        if (data.error) {
+          alert("Google sync failed: " + data.error);
+          return;
+        }
+
+        if (data.conflict_count > 0) {
+          let message = "Google sync completed. Some imported events overlap with existing events.\n\n";
+
+          data.conflicts.forEach((conflict, index) => {
+            message += `${index + 1}. Google event: ${conflict.google_event.title}\n`;
+            message += `Start: ${formatDateTime(conflict.google_event.start)}\n`;
+            message += `End: ${formatDateTime(conflict.google_event.end)}\n`;
+            message += "Overlaps with:\n";
+
+            conflict.overlaps_with.forEach((event) => {
+              message += `- ${event.title} (${formatDateTime(event.start)} - ${formatDateTime(event.end)})\n`;
+            });
+
+            message += "\n";
+          });
+
+          alert(message);
+        } else {
+          alert(
+            `Google sync completed.\nImported: ${data.imported_count}\nUpdated: ${data.updated_count}`
+          );
+        }
+
+        loadEvents();
+      });
+  }
+
+  if (!token) {
+    return (
+      <div className="app">
+        <div className="form-container">
+          <h1>My Calendar App</h1>
+
+          <div className="modal-buttons">
+            <button type="button" onClick={() => setAuthMode("login")}>
+              Login
+            </button>
+
+            <button type="button" onClick={() => setAuthMode("register")}>
+              Register
+            </button>
+          </div>
+
+          <h2>{authMode === "login" ? "Login" : "Register"}</h2>
+
+          <form onSubmit={authMode === "login" ? handleLogin : handleRegister}>
+            {authMode === "register" && (
+              <input
+                type="text"
+                name="name"
+                placeholder="Name"
+                value={authForm.name}
+                onChange={handleAuthChange}
+                required
+              />
+            )}
+
+            <input
+              type="email"
+              name="email"
+              placeholder="Email"
+              value={authForm.email}
+              onChange={handleAuthChange}
+              required
+            />
+
+            <input
+              type="password"
+              name="password"
+              placeholder="Password"
+              value={authForm.password}
+              onChange={handleAuthChange}
+              required
+            />
+
+            <button type="submit">
+              {authMode === "login" ? "Login" : "Create account"}
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="app">
-      <h1>My Calendar App</h1>
+      <div className="top-bar">
+        <div>
+          <h1>My Calendar App</h1>
+          {user && <p>Logged in as {user.name}</p>}
+        </div>
+
+        <div className="google-actions">
+          {googleStatus.connected ? (
+            <>
+              <span>Google connected: {googleStatus.google_email}</span>
+
+              <button type="button" onClick={syncFromGoogle}>
+                Sync from Google
+              </button>
+
+              <button type="button" onClick={disconnectGoogleCalendar}>
+                Disconnect Google
+              </button>
+            </>
+          ) : (
+            <button type="button" onClick={connectGoogleCalendar}>
+              Connect Google Calendar
+            </button>
+          )}
+
+
+
+          <button type="button" onClick={handleLogout}>
+            Logout
+          </button>
+        </div>
+      </div>
 
       <div className="calendar-container">
         <FullCalendar
