@@ -146,6 +146,18 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 30px;
+}
+
+.top-bar > div:first-child {
+  flex-shrink: 0;
+}
+
+.top-bar h1 {
+  margin: 0 0 8px;
+  font-size: 42px;
+  line-height: 1.15;
+  white-space: nowrap;
 }
 
 .top-bar p {
